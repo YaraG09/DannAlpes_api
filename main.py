@@ -3,19 +3,28 @@ from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient
 from datetime import datetime
 import os
-import uuid  # para generar resena_id único
+import uuid  # para generar identificadores únicos
 
 app = FastAPI()
 
-# Configuración CORS
+# -------------------------------
+# CONFIGURACIÓN CORS
+# -------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://iacademy2.oracle.com",  # dominio de tu APEX
+        "https://apex.oracle.com",       # opcional si usas entorno público
+        "*"                              # temporal para pruebas
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
 )
 
-# Conexión Mongo
+# -------------------------------
+# CONEXIÓN A MONGODB
+# -------------------------------
 client = MongoClient(os.environ["MONGO_URI"])
 db = client["ISIS2304E10202610"]
 
