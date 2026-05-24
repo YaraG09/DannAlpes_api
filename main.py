@@ -1,6 +1,5 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from pymongo import MongoClient
 from datetime import datetime
 import os
@@ -8,34 +7,14 @@ import uuid
  
 app = FastAPI()
  
-# -------------------------------
-# CORS - Middleware manual (fuerza headers en toda respuesta)
-# -------------------------------
-@app.middleware("http")
-async def add_cors_headers(request: Request, call_next):
-    if request.method == "OPTIONS":
-        response = JSONResponse(content={}, status_code=200)
-    else:
-        response = await call_next(request)
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-    return response
- 
-# -------------------------------
-# CORS - Middleware de FastAPI (doble seguridad)
-# -------------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=False,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*"]
 )
  
-# -------------------------------
-# CONEXIÓN A MONGODB
-# -------------------------------
+# Conexión usando variable de entorno MONGO_URI
 client = MongoClient(os.environ["MONGO_URI"])
 db = client["ISIS2304E10202610"]
  
@@ -43,10 +22,7 @@ db = client["ISIS2304E10202610"]
 def inicio():
     return {"estado": "API funcionando correctamente"}
  
- 
-# ================================================================
 # RF1 - CREAR RESEÑA
-# ================================================================
 @app.post("/hoteles/{id_hotel}/resenas")
 def post_resena(id_hotel: str, datos: dict):
     datos["id_hotel"]        = id_hotel
@@ -59,10 +35,7 @@ def post_resena(id_hotel: str, datos: dict):
     db["resenas"].insert_one(datos)
     return {"mensaje": "Reseña guardada", "resena_id": datos["resena_id"]}
  
- 
-# ================================================================
-# RF2 - EDITAR RESEÑA (cliente)
-# ================================================================
+# RF2 - EDITAR RESEÑA
 @app.put("/hoteles/{id_hotel}/resenas/{resena_id}")
 def editar_resena(id_hotel: str, resena_id: str, datos: dict):
     db["resenas"].update_one(
@@ -75,10 +48,7 @@ def editar_resena(id_hotel: str, resena_id: str, datos: dict):
     )
     return {"mensaje": "Reseña actualizada"}
  
- 
-# ================================================================
 # RF3 - ELIMINAR RESEÑA (cliente)
-# ================================================================
 @app.delete("/hoteles/{id_hotel}/resenas/{resena_id}")
 def eliminar_resena(id_hotel: str, resena_id: str):
     db["resenas"].update_one(
@@ -87,10 +57,7 @@ def eliminar_resena(id_hotel: str, resena_id: str):
     )
     return {"mensaje": "Reseña eliminada"}
  
- 
-# ================================================================
-# RF4 - CONSULTAR RESEÑAS DE UN HOTEL (público)
-# ================================================================
+# RF4 - CONSULTAR RESEÑAS DE UN HOTEL
 @app.get("/hoteles/{id_hotel}/resenas")
 def get_resenas(id_hotel: str):
     resenas = list(db["resenas"].find(
@@ -99,10 +66,7 @@ def get_resenas(id_hotel: str):
     ).sort("fecha_creacion", -1))
     return resenas
  
- 
-# ================================================================
 # RF5 - MARCAR RESEÑA COMO ÚTIL
-# ================================================================
 @app.post("/hoteles/{id_hotel}/resenas/{resena_id}/voto")
 def votar_resena(id_hotel: str, resena_id: str, datos: dict):
     datos["id_hotel"]   = id_hotel
@@ -115,10 +79,7 @@ def votar_resena(id_hotel: str, resena_id: str, datos: dict):
     )
     return {"mensaje": "Voto registrado"}
  
- 
-# ================================================================
 # RF6 - HISTORIAL DE RESEÑAS PROPIAS DEL CLIENTE
-# ================================================================
 @app.get("/clientes/{id_cliente}/resenas")
 def get_resenas_cliente(id_cliente: str):
     resenas = list(db["resenas"].find(
@@ -127,10 +88,7 @@ def get_resenas_cliente(id_cliente: str):
     ).sort("fecha_creacion", -1))
     return resenas
  
- 
-# ================================================================
 # RF7 - RESPONDER RESEÑA (administrador)
-# ================================================================
 @app.post("/hoteles/{id_hotel}/resenas/{resena_id}/respuesta")
 def responder_resena(id_hotel: str, resena_id: str, datos: dict):
     db["resenas"].update_one(
@@ -145,10 +103,7 @@ def responder_resena(id_hotel: str, resena_id: str, datos: dict):
     )
     return {"mensaje": "Respuesta registrada"}
  
- 
-# ================================================================
 # RF8 - ELIMINAR RESEÑA (administrador)
-# ================================================================
 @app.delete("/admin/hoteles/{id_hotel}/resenas/{resena_id}")
 def eliminar_resena_admin(id_hotel: str, resena_id: str):
     db["resenas"].update_one(
@@ -157,10 +112,7 @@ def eliminar_resena_admin(id_hotel: str, resena_id: str):
     )
     return {"mensaje": "Reseña eliminada por administrador"}
  
- 
-# ================================================================
 # RF9 - DESTACAR RESEÑA (administrador)
-# ================================================================
 @app.post("/admin/hoteles/{id_hotel}/resenas/{resena_id}/destacar")
 def destacar_resena(id_hotel: str, resena_id: str):
     db["resenas"].update_many(
@@ -173,10 +125,7 @@ def destacar_resena(id_hotel: str, resena_id: str):
     )
     return {"mensaje": "Reseña destacada"}
  
- 
-# ================================================================
 # RFC1 - TOP 10 HOTELES POR CALIFICACIÓN PROMEDIO
-# ================================================================
 @app.get("/consultas/top-hoteles")
 def top_hoteles(fecha_inicio: str = None, fecha_fin: str = None):
     filtro = {"estado": "publicada"}
@@ -202,10 +151,7 @@ def top_hoteles(fecha_inicio: str = None, fecha_fin: str = None):
     ]
     return list(db["resenas"].aggregate(pipeline))
  
- 
-# ================================================================
-# RFC2 - EVOLUCIÓN DE REPUTACIÓN DE UN HOTEL MES A MES
-# ================================================================
+# RFC2 - EVOLUCIÓN DE REPUTACIÓN MES A MES
 @app.get("/consultas/evolucion/{id_hotel}")
 def evolucion_hotel(id_hotel: str, anio: int = 2024):
     pipeline = [
@@ -232,10 +178,7 @@ def evolucion_hotel(id_hotel: str, anio: int = 2024):
     ]
     return list(db["resenas"].aggregate(pipeline))
  
- 
-# ================================================================
-# RFC3 - COMPARATIVO DE HOTELES
-# ================================================================
+# RFC3 - COMPARATIVO DE HOTELES POR CIUDAD
 @app.get("/consultas/comparativo")
 def comparativo():
     pipeline = [
@@ -262,12 +205,10 @@ def comparativo():
     ]
     return list(db["resenas"].aggregate(pipeline))
  
- 
-# ================================================================
 # AUXILIAR - Ver votos de una reseña
-# ================================================================
 @app.get("/hoteles/{id_hotel}/resenas/{id_resena}/votos")
 def get_votos(id_hotel: str, id_resena: str):
     votos = list(db["votos_utilidad"].find({"id_resena": id_resena}, {"_id": 0}))
     return votos
+
  
