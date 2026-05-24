@@ -1,16 +1,15 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pymongo import MongoClient
 from datetime import datetime
 import os
 import uuid
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
  
 app = FastAPI()
  
 # -------------------------------
-# CONFIGURACIÓN CORS
+# CORS - Middleware manual (fuerza headers en toda respuesta)
 # -------------------------------
 @app.middleware("http")
 async def add_cors_headers(request: Request, call_next):
@@ -19,9 +18,20 @@ async def add_cors_headers(request: Request, call_next):
     else:
         response = await call_next(request)
     response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "*"
-    response.headers["Access-Control-Allow-Headers"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     return response
+ 
+# -------------------------------
+# CORS - Middleware de FastAPI (doble seguridad)
+# -------------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
  
 # -------------------------------
 # CONEXIÓN A MONGODB
@@ -150,7 +160,6 @@ def eliminar_resena_admin(id_hotel: str, resena_id: str):
  
 # ================================================================
 # RF9 - DESTACAR RESEÑA (administrador)
-# Solo puede haber una destacada por hotel a la vez
 # ================================================================
 @app.post("/admin/hoteles/{id_hotel}/resenas/{resena_id}/destacar")
 def destacar_resena(id_hotel: str, resena_id: str):
@@ -163,3 +172,102 @@ def destacar_resena(id_hotel: str, resena_id: str):
         {"$set": {"destacada": True}}
     )
     return {"mensaje": "Reseña destacada"}
+ 
+ 
+# ================================================================
+# RFC1 - TOP 10 HOTELES POR CALIFICACIÓN PROMEDIO
+# ================================================================
+@app.get("/consultas/top-hoteles")
+def top_hoteles(fecha_inicio: str = None, fecha_fin: str = None):
+    filtro = {"estado": "publicada"}
+    if fecha_inicio:
+        filtro["fecha_creacion"] = {"$gte": fecha_inicio}
+    if fecha_fin:
+        filtro.setdefault("fecha_creacion", {})["$lte"] = fecha_fin
+    pipeline = [
+        {"$match": filtro},
+        {"$group": {
+            "_id":           "$id_hotel",
+            "promedio":      {"$avg": "$calificacion"},
+            "total_resenas": {"$sum": 1}
+        }},
+        {"$sort":  {"promedio": -1}},
+        {"$limit": 10},
+        {"$project": {
+            "_id":           0,
+            "id_hotel":      "$_id",
+            "promedio":      {"$round": ["$promedio", 2]},
+            "total_resenas": 1
+        }}
+    ]
+    return list(db["resenas"].aggregate(pipeline))
+ 
+ 
+# ================================================================
+# RFC2 - EVOLUCIÓN DE REPUTACIÓN DE UN HOTEL MES A MES
+# ================================================================
+@app.get("/consultas/evolucion/{id_hotel}")
+def evolucion_hotel(id_hotel: str, anio: int = 2024):
+    pipeline = [
+        {"$match": {
+            "id_hotel": id_hotel,
+            "estado":   "publicada",
+            "fecha_creacion": {
+                "$gte": f"{anio}-01-01",
+                "$lte": f"{anio}-12-31"
+            }
+        }},
+        {"$group": {
+            "_id":           {"$substr": ["$fecha_creacion", 0, 7]},
+            "promedio":      {"$avg": "$calificacion"},
+            "total_resenas": {"$sum": 1}
+        }},
+        {"$sort": {"_id": 1}},
+        {"$project": {
+            "_id":           0,
+            "mes":           "$_id",
+            "promedio":      {"$round": ["$promedio", 2]},
+            "total_resenas": 1
+        }}
+    ]
+    return list(db["resenas"].aggregate(pipeline))
+ 
+ 
+# ================================================================
+# RFC3 - COMPARATIVO DE HOTELES
+# ================================================================
+@app.get("/consultas/comparativo")
+def comparativo():
+    pipeline = [
+        {"$match": {"estado": "publicada"}},
+        {"$group": {
+            "_id":           "$id_hotel",
+            "promedio":      {"$avg": "$calificacion"},
+            "total_resenas": {"$sum": 1},
+            "con_respuesta": {"$sum": {
+                "$cond": [{"$ne": ["$respuesta_hotel", None]}, 1, 0]
+            }},
+            "destacadas": {"$sum": {
+                "$cond": ["$destacada", 1, 0]
+            }}
+        }},
+        {"$project": {
+            "_id":           0,
+            "id_hotel":      "$_id",
+            "promedio":      {"$round": ["$promedio", 2]},
+            "total_resenas": 1,
+            "con_respuesta": 1,
+            "destacadas":    1
+        }}
+    ]
+    return list(db["resenas"].aggregate(pipeline))
+ 
+ 
+# ================================================================
+# AUXILIAR - Ver votos de una reseña
+# ================================================================
+@app.get("/hoteles/{id_hotel}/resenas/{id_resena}/votos")
+def get_votos(id_hotel: str, id_resena: str):
+    votos = list(db["votos_utilidad"].find({"id_resena": id_resena}, {"_id": 0}))
+    return votos
+ 
