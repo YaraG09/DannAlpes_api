@@ -10,13 +10,10 @@ app = FastAPI()
 # 🔹 Configuración CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://iacademy2.oracle.com",  # dominio de tu APEX
-        "https://apex.oracle.com"        # opcional si usas entorno público
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],   # incluye OPTIONS automáticamente
-    allow_headers=["*"]
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
 )
 
 # 🔹 Conexión a MongoDB
