@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient
 from datetime import datetime
+from bson.int32 import Int32
 import os
 import uuid
 
@@ -53,33 +54,42 @@ def post_resena(id_hotel: str, datos: dict):
 
             "resena_id": str(uuid.uuid4()),
 
-            "id_reserva": datos.get("id_reserva"),
-
-            "id_cliente": datos.get("id_cliente"),
-
-            "calificacion": int(
-                datos.get("calificacion", 0)
+            "id_reserva": str(
+                datos.get("id_reserva")
             ),
 
-            "texto": datos.get("texto"),
+            "id_cliente": str(
+                datos.get("id_cliente")
+            ),
+
+            "calificacion": Int32(
+                int(datos.get("calificacion", 0))
+            ),
+
+            "texto": str(
+                datos.get("texto")
+            ),
 
             "fecha_creacion":
-                datetime.now().isoformat(),
+                datetime.now(),
 
             "estado": "publicada",
 
-            "votos_utilidad": 0,
+            "votos_utilidad": Int32(0),
 
             "destacada": False,
 
             "respuesta_hotel": None
         }
 
-        db["resenas"].insert_one(nueva_resena)
+        db["resenas"].insert_one(
+            nueva_resena
+        )
 
         return {
 
-            "mensaje": "Reseña guardada",
+            "mensaje":
+                "Reseña guardada",
 
             "resena_id":
                 nueva_resena["resena_id"]
@@ -113,19 +123,27 @@ def editar_resena(
             "$set": {
 
                 "texto":
-                    datos.get("texto"),
+                    str(datos.get("texto")),
 
                 "calificacion":
-                    datos.get("calificacion"),
+                    Int32(
+                        int(
+                            datos.get(
+                                "calificacion",
+                                0
+                            )
+                        )
+                    ),
 
                 "fecha_edicion":
-                    datetime.now().isoformat()
+                    datetime.now()
             }
         }
     )
 
     return {
-        "mensaje": "Reseña actualizada"
+        "mensaje":
+            "Reseña actualizada"
     }
 
 
@@ -153,7 +171,8 @@ def eliminar_resena(
     )
 
     return {
-        "mensaje": "Reseña eliminada"
+        "mensaje":
+            "Reseña eliminada"
     }
 
 
@@ -177,7 +196,11 @@ def get_resenas(id_hotel: str):
                 {
                     "_id": 0
                 }
-            ).sort("fecha_creacion", -1)
+
+            ).sort(
+                "fecha_creacion",
+                -1
+            )
         )
 
         return resenas
@@ -201,15 +224,21 @@ def votar_resena(
     datos: dict
 ):
 
-    datos["id_hotel"] = id_hotel
+    voto = {
 
-    datos["resena_id"] = resena_id
+        "id_resena": resena_id,
 
-    datos["fecha_voto"] = (
-        datetime.now().isoformat()
+        "id_usuario": str(
+            datos.get("id_usuario")
+        ),
+
+        "fecha_voto":
+            datetime.now()
+    }
+
+    db["votos_utilidad"].insert_one(
+        voto
     )
-
-    db["votos_utilidad"].insert_one(datos)
 
     db["resenas"].update_one(
 
@@ -220,13 +249,15 @@ def votar_resena(
 
         {
             "$inc": {
-                "votos_utilidad": 1
+                "votos_utilidad":
+                    Int32(1)
             }
         }
     )
 
     return {
-        "mensaje": "Voto registrado"
+        "mensaje":
+            "Voto registrado"
     }
 
 
@@ -248,7 +279,10 @@ def get_resenas_cliente(id_cliente: str):
                 "_id": 0
             }
 
-        ).sort("fecha_creacion", -1)
+        ).sort(
+            "fecha_creacion",
+            -1
+        )
     )
 
     return resenas
@@ -279,24 +313,29 @@ def responder_resena(
                 "respuesta_hotel": {
 
                     "texto":
-                        datos.get(
-                            "texto_respuesta"
+                        str(
+                            datos.get(
+                                "texto_respuesta"
+                            )
                         ),
 
                     "id_admin":
-                        datos.get(
-                            "id_admin"
+                        str(
+                            datos.get(
+                                "id_admin"
+                            )
                         ),
 
                     "fecha":
-                        datetime.now().isoformat()
+                        datetime.now()
                 }
             }
         }
     )
 
     return {
-        "mensaje": "Respuesta registrada"
+        "mensaje":
+            "Respuesta registrada"
     }
 
 
@@ -320,7 +359,8 @@ def eliminar_resena_admin(
 
         {
             "$set": {
-                "estado": "eliminada_admin"
+                "estado":
+                    "eliminada_admin"
             }
         }
     )
@@ -371,5 +411,6 @@ def destacar_resena(
     )
 
     return {
-        "mensaje": "Reseña destacada"
+        "mensaje":
+            "Reseña destacada"
     }
