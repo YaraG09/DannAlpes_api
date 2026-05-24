@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient
 from datetime import datetime
-from bson.int32 import Int32
 import os
 import uuid
 
@@ -10,7 +9,7 @@ app = FastAPI()
 
 
 # =========================================================
-# CONFIGURACIÓN CORS
+# CORS
 # =========================================================
 app.add_middleware(
     CORSMiddleware,
@@ -22,9 +21,11 @@ app.add_middleware(
 
 
 # =========================================================
-# CONEXIÓN MONGODB
+# MONGODB
 # =========================================================
-client = MongoClient(os.environ["MONGO_URI"])
+client = MongoClient(
+    os.environ["MONGO_URI"]
+)
 
 db = client["ISIS2304E10202610"]
 
@@ -36,7 +37,8 @@ db = client["ISIS2304E10202610"]
 def inicio():
 
     return {
-        "estado": "API funcionando correctamente"
+        "estado":
+            "API funcionando correctamente"
     }
 
 
@@ -44,42 +46,64 @@ def inicio():
 # RF1 - CREAR RESEÑA
 # =========================================================
 @app.post("/hoteles/{id_hotel}/resenas")
-def post_resena(id_hotel: str, datos: dict):
+def post_resena(
+    id_hotel: str,
+    datos: dict
+):
 
     try:
 
         nueva_resena = {
 
-            "id_hotel": id_hotel,
+            "id_hotel":
+                str(id_hotel),
 
-            "resena_id": str(uuid.uuid4()),
+            "resena_id":
+                str(uuid.uuid4()),
 
-            "id_reserva": str(
-                datos.get("id_reserva")
-            ),
+            "id_reserva":
+                str(
+                    datos.get(
+                        "id_reserva"
+                    )
+                ),
 
-            "id_cliente": str(
-                datos.get("id_cliente")
-            ),
+            "id_cliente":
+                str(
+                    datos.get(
+                        "id_cliente"
+                    )
+                ),
 
-            "calificacion": Int32(
-                int(datos.get("calificacion", 0))
-            ),
+            "calificacion":
+                int(
+                    datos.get(
+                        "calificacion",
+                        0
+                    )
+                ),
 
-            "texto": str(
-                datos.get("texto")
-            ),
+            "texto":
+                str(
+                    datos.get(
+                        "texto"
+                    )
+                ),
 
             "fecha_creacion":
                 datetime.now(),
 
-            "estado": "publicada",
+            "estado":
+                "publicada",
 
-            "votos_utilidad": Int32(0),
+            "votos_utilidad":
+                0,
 
-            "destacada": False,
+            "destacada":
+                False,
 
-            "respuesta_hotel": None
+            "respuesta_hotel":
+                None
         }
 
         db["resenas"].insert_one(
@@ -92,7 +116,9 @@ def post_resena(id_hotel: str, datos: dict):
                 "Reseña guardada",
 
             "resena_id":
-                nueva_resena["resena_id"]
+                nueva_resena[
+                    "resena_id"
+                ]
         }
 
     except Exception as e:
@@ -105,7 +131,9 @@ def post_resena(id_hotel: str, datos: dict):
 # =========================================================
 # RF2 - EDITAR RESEÑA
 # =========================================================
-@app.put("/hoteles/{id_hotel}/resenas/{resena_id}")
+@app.put(
+    "/hoteles/{id_hotel}/resenas/{resena_id}"
+)
 def editar_resena(
     id_hotel: str,
     resena_id: str,
@@ -123,15 +151,17 @@ def editar_resena(
             "$set": {
 
                 "texto":
-                    str(datos.get("texto")),
+                    str(
+                        datos.get(
+                            "texto"
+                        )
+                    ),
 
                 "calificacion":
-                    Int32(
-                        int(
-                            datos.get(
-                                "calificacion",
-                                0
-                            )
+                    int(
+                        datos.get(
+                            "calificacion",
+                            0
                         )
                     ),
 
@@ -148,9 +178,11 @@ def editar_resena(
 
 
 # =========================================================
-# RF3 - ELIMINAR RESEÑA CLIENTE
+# RF3 - ELIMINAR RESEÑA
 # =========================================================
-@app.delete("/hoteles/{id_hotel}/resenas/{resena_id}")
+@app.delete(
+    "/hoteles/{id_hotel}/resenas/{resena_id}"
+)
 def eliminar_resena(
     id_hotel: str,
     resena_id: str
@@ -165,7 +197,8 @@ def eliminar_resena(
 
         {
             "$set": {
-                "estado": "eliminada"
+                "estado":
+                    "eliminada"
             }
         }
     )
@@ -177,9 +210,11 @@ def eliminar_resena(
 
 
 # =========================================================
-# RF4 - CONSULTAR RESEÑAS HOTEL
+# RF4 - CONSULTAR RESEÑAS
 # =========================================================
-@app.get("/hoteles/{id_hotel}/resenas")
+@app.get(
+    "/hoteles/{id_hotel}/resenas"
+)
 def get_resenas(id_hotel: str):
 
     try:
@@ -189,8 +224,11 @@ def get_resenas(id_hotel: str):
             db["resenas"].find(
 
                 {
-                    "id_hotel": id_hotel,
-                    "estado": "publicada"
+                    "id_hotel":
+                        id_hotel,
+
+                    "estado":
+                        "publicada"
                 },
 
                 {
@@ -226,11 +264,15 @@ def votar_resena(
 
     voto = {
 
-        "id_resena": resena_id,
+        "id_resena":
+            str(resena_id),
 
-        "id_usuario": str(
-            datos.get("id_usuario")
-        ),
+        "id_usuario":
+            str(
+                datos.get(
+                    "id_usuario"
+                )
+            ),
 
         "fecha_voto":
             datetime.now()
@@ -249,8 +291,7 @@ def votar_resena(
 
         {
             "$inc": {
-                "votos_utilidad":
-                    Int32(1)
+                "votos_utilidad": 1
             }
         }
     )
@@ -264,15 +305,20 @@ def votar_resena(
 # =========================================================
 # RF6 - HISTORIAL CLIENTE
 # =========================================================
-@app.get("/clientes/{id_cliente}/resenas")
-def get_resenas_cliente(id_cliente: str):
+@app.get(
+    "/clientes/{id_cliente}/resenas"
+)
+def get_resenas_cliente(
+    id_cliente: str
+):
 
     resenas = list(
 
         db["resenas"].find(
 
             {
-                "id_cliente": id_cliente
+                "id_cliente":
+                    id_cliente
             },
 
             {
@@ -303,8 +349,11 @@ def responder_resena(
     db["resenas"].update_one(
 
         {
-            "id_hotel": id_hotel,
-            "resena_id": resena_id
+            "id_hotel":
+                id_hotel,
+
+            "resena_id":
+                resena_id
         },
 
         {
@@ -353,8 +402,11 @@ def eliminar_resena_admin(
     db["resenas"].update_one(
 
         {
-            "id_hotel": id_hotel,
-            "resena_id": resena_id
+            "id_hotel":
+                id_hotel,
+
+            "resena_id":
+                resena_id
         },
 
         {
@@ -385,13 +437,17 @@ def destacar_resena(
     db["resenas"].update_many(
 
         {
-            "id_hotel": id_hotel,
-            "destacada": True
+            "id_hotel":
+                id_hotel,
+
+            "destacada":
+                True
         },
 
         {
             "$set": {
-                "destacada": False
+                "destacada":
+                    False
             }
         }
     )
@@ -399,13 +455,17 @@ def destacar_resena(
     db["resenas"].update_one(
 
         {
-            "id_hotel": id_hotel,
-            "resena_id": resena_id
+            "id_hotel":
+                id_hotel,
+
+            "resena_id":
+                resena_id
         },
 
         {
             "$set": {
-                "destacada": True
+                "destacada":
+                    True
             }
         }
     )
