@@ -314,3 +314,227 @@ def get_resenas_admin(id_hotel: str):
 
     except Exception as e:
         return {"error": str(e)}
+
+# RFC 1
+@app.get("/consultas/top-hoteles")
+def top_hoteles(fecha_inicio: str, fecha_fin: str):
+    """
+    Devuelve los 10 hoteles con mayor calificación promedio
+    entre fecha_inicio y fecha_fin (solo reseñas publicadas).
+    Pipeline:
+        1. $match: filtra por estado=publicada y rango de fechas
+        2. $group: agrupa por id_hotel, calcula promedio y cuenta
+        3. $sort: ordena descendente por calificacion_promedio
+        4. $limit: toma los 10 primeros
+        5. $project: renombra _id y redondea el promedio
+    """
+    try:
+        fi = datetime.fromisoformat(fecha_inicio)
+        ff = datetime.fromisoformat(fecha_fin)
+    except ValueError:
+        return {"error": "Formato de fecha inválido. Use YYYY-MM-DD."}
+
+    pipeline = [
+        {
+            "$match": {
+                "estado": "publicada",
+                "fecha_creacion": {"$gte": fi, "$lte": ff},
+            }
+        },
+        {
+            "$group": {
+                "_id": "$id_hotel",
+                "calificacion_promedio": {"$avg": "$calificacion"},
+                "total_resenas": {"$sum": 1},
+            }
+        },
+        {"$sort": {"calificacion_promedio": -1}},
+        {"$limit": 10},
+        {
+            "$project": {
+                "_id": 0,
+                "id_hotel": "$_id",
+                "calificacion_promedio": {
+                    "$round": ["$calificacion_promedio", 2]
+                },
+                "total_resenas": 1,
+            }
+        },
+    ]
+
+    return list(db["resenas"].aggregate(pipeline))
+
+#RFC 2
+@app.get("/consultas/evolucion/{id_hotel}")
+def evolucion_hotel(id_hotel: str, anio: int):
+    """
+    Para el hotel indicado muestra la calificación promedio
+    por mes durante el año solicitado.
+
+    Pipeline:
+        1. $match:filtra por id_hotel, estado=publicada y año
+        2. $group:agrupa por mes, calcula promedio y cuenta
+        3. $sort:ordena por mes (1 → 12)
+        4. $project:construye etiqueta de mes legible
+    """
+    MESES = {
+        1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
+        5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
+        9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre",
+    }
+
+    fecha_inicio = datetime(anio, 1, 1)
+    fecha_fin    = datetime(anio, 12, 31)
+
+    pipeline = [
+        {
+            "$match": {
+                "id_hotel": id_hotel,
+                "estado": "publicada",
+                "fecha_creacion": {"$gte": fecha_inicio, "$lte": fecha_fin},
+            }
+        },
+        {
+            "$group": {
+                "_id": {"mes": {"$month": "$fecha_creacion"}},
+                "calificacion_promedio": {"$avg": "$calificacion"},
+                "total_resenas": {"$sum": 1},
+            }
+        },
+        {"$sort": {"_id.mes": 1}},
+        {
+            "$project": {
+                "_id": 0,
+                "mes_numero": "$_id.mes",
+                "calificacion_promedio": {
+                    "$round": ["$calificacion_promedio", 2]
+                },
+                "total_resenas": 1,
+            }
+        },
+    ]
+
+    filas = list(db["resenas"].aggregate(pipeline))
+
+    # Añadir nombre del mes legible
+    for fila in filas:
+        fila["mes_nombre"] = MESES.get(fila["mes_numero"], "Desconocido")
+
+    return {"id_hotel": id_hotel, "anio": anio, "evolucion": filas}
+
+@app.get("/consultas/comparativo")
+def comparativo_ciudad(hoteles: str):
+    """
+    Recibe los IDs de los hoteles de una ciudad (obtenidos previamente
+    de Oracle) y devuelve para cada uno:
+        - calificacion_promedio
+        - total_resenas
+        - pct_con_respuesta  (% reseñas con respuesta de administrador)
+        - pct_destacadas     (% reseñas marcadas como destacadas)
+        - bajo_promedio_ciudad (bool: está por debajo del promedio de la ciudad)
+
+    Nota: el campo 'respuesta_admin' debe existir en el documento de reseña
+    cuando el administrador responde. Su ausencia se interpreta
+    como sin respuesta.
+
+    Pipeline:
+        1. $match: filtra por lista de hoteles y estado publicada
+        2. $group: estadísticas por hotel
+        3. $addFields: calcula porcentajes
+        4. $facet: separa resultado por hotel y promedio global
+        5. Etapa final: marca hoteles bajo el promedio de ciudad
+    """
+    lista_hoteles = [h.strip() for h in hoteles.split(",") if h.strip()]
+
+    pipeline = [
+        {
+            "$match": {
+                "id_hotel": {"$in": lista_hoteles},
+                "estado": "publicada",
+            }
+        },
+        {
+            "$group": {
+                "_id": "$id_hotel",
+                "calificacion_promedio": {"$avg": "$calificacion"},
+                "total_resenas": {"$sum": 1},
+                # Cuenta reseñas que tienen el campo respuesta_admin
+                "con_respuesta": {
+                    "$sum": {
+                        "$cond": [ {"$ifNull": ["$respuesta_admin", False]}, 1, 0]
+                    }
+                },
+                # Cuenta reseñas marcadas como destacadas=true
+                "destacadas": {
+                    "$sum": {"$cond": [{"$eq": ["$destacada", True]}, 1, 0]}
+                },
+            }
+        },
+        {
+            "$addFields": {
+                "calificacion_promedio": {"$round": ["$calificacion_promedio", 2]},
+                "pct_con_respuesta": {
+                    "$round": [{
+                            "$multiply": [
+                                {"$divide": ["$con_respuesta", "$total_resenas"]},
+                                100,
+                            ]}, 1,]
+                },
+                "pct_destacadas": {
+                    "$round": [
+                        {
+                            "$multiply": [
+                                {"$divide": ["$destacadas", "$total_resenas"]},
+                                100,
+                            ]
+                        },
+                        1,
+                    ]
+                },
+            }
+        },
+        # $facet permite calcular el promedio de ciudad sobre el mismo conjunto
+        {
+            "$facet": {
+                "por_hotel": [
+                    {
+                        "$project": {
+                            "_id": 0,
+                            "id_hotel": "$_id",
+                            "calificacion_promedio": 1,
+                            "total_resenas": 1,
+                            "pct_con_respuesta": 1,
+                            "pct_destacadas": 1,
+                        }
+                    }
+                ],
+                "promedio_ciudad": [
+                    {
+                        "$group": {
+                            "_id": None,
+                            "promedio": {"$avg": "$calificacion_promedio"},
+                        }
+                    }
+                ],
+            }
+        },
+    ]
+
+    resultado = list(db["resenas"].aggregate(pipeline))
+    if not resultado:
+        return {"hoteles": [], "promedio_ciudad": None}
+
+    datos = resultado[0]
+    prom_ciudad_doc = datos.get("promedio_ciudad", [])
+    promedio_ciudad = (
+        round(prom_ciudad_doc[0]["promedio"], 2) if prom_ciudad_doc else None
+    )
+
+    hoteles_data = datos.get("por_hotel", [])
+    for h in hoteles_data:
+        h["bajo_promedio_ciudad"] = h["calificacion_promedio"] < promedio_ciudad if promedio_ciudad is not None else False
+
+    return {
+        "promedio_ciudad": promedio_ciudad,
+        "hoteles": hoteles_data,
+    }
