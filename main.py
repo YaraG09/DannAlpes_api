@@ -73,8 +73,14 @@ def post_resena(id_hotel: str, datos: dict):
             "destacada":       False,
             "respuesta_hotel": None
         }
+
         db["resenas"].insert_one(nueva_resena)
-        return {"mensaje": "Reseña guardada", "resena_id": nueva_resena["resena_id"]}
+
+        return {
+            "mensaje": "Reseña guardada",
+            "resena_id": nueva_resena["resena_id"]
+        }
+
     except Exception as e:
         return {"error": str(e)}
 
@@ -83,38 +89,71 @@ def post_resena(id_hotel: str, datos: dict):
 # =========================================================
 @app.put("/hoteles/{id_hotel}/resenas/{resena_id}")
 def editar_resena(id_hotel: str, resena_id: str, datos: dict):
+
     db["resenas"].update_one(
-        {"id_hotel": id_hotel, "resena_id": resena_id},
-        {"$set": {
-            "texto":         str(datos.get("texto")),
-            "calificacion":  int(datos.get("calificacion", 0)),
-            "fecha_edicion": datetime.now()
-        }}
+        {
+            "id_hotel": id_hotel,
+            "resena_id": resena_id
+        },
+        {
+            "$set": {
+                "texto": str(datos.get("texto")),
+                "calificacion": int(datos.get("calificacion", 0)),
+                "fecha_edicion": datetime.now()
+            }
+        }
     )
+
     return {"mensaje": "Reseña actualizada"}
 
 # =========================================================
-# RF3 - ELIMINAR RESEÑA (cliente)
+# RF3 - ELIMINAR RESEÑA CLIENTE
 # =========================================================
 @app.delete("/hoteles/{id_hotel}/resenas/{resena_id}")
 def eliminar_resena(id_hotel: str, resena_id: str):
+
     db["resenas"].update_one(
-        {"id_hotel": id_hotel, "resena_id": resena_id},
-        {"$set": {"estado": "eliminada"}}
+        {
+            "id_hotel": id_hotel,
+            "resena_id": resena_id
+        },
+        {
+            "$set": {
+                "estado": "eliminada"
+            }
+        }
     )
+
     return {"mensaje": "Reseña eliminada"}
 
 # =========================================================
-# RF4 - CONSULTAR RESEÑAS (público, solo publicadas)
+# RF4 - CONSULTAR RESEÑAS PÚBLICAS
+# DESTACADAS PRIMERO
 # =========================================================
 @app.get("/hoteles/{id_hotel}/resenas")
 def get_resenas(id_hotel: str):
+
     try:
-        resenas = list(db["resenas"].find(
-            {"id_hotel": id_hotel, "estado": "publicada"},
-            {"_id": 0}
-        ).sort("fecha_creacion", -1))
+
+        resenas = list(
+            db["resenas"]
+            .find(
+                {
+                    "id_hotel": id_hotel,
+                    "estado": "publicada"
+                },
+                {
+                    "_id": 0
+                }
+            )
+            .sort([
+                ("destacada", -1),
+                ("fecha_creacion", -1)
+            ])
+        )
+
         return resenas
+
     except Exception as e:
         return {"error": str(e)}
 
@@ -123,16 +162,27 @@ def get_resenas(id_hotel: str):
 # =========================================================
 @app.post("/hoteles/{id_hotel}/resenas/{resena_id}/voto")
 def votar_resena(id_hotel: str, resena_id: str, datos: dict):
+
     voto = {
-        "id_resena":  str(resena_id),
+        "id_resena": str(resena_id),
         "id_usuario": str(datos.get("id_usuario")),
         "fecha_voto": datetime.now()
     }
+
     db["votos_utilidad"].insert_one(voto)
+
     db["resenas"].update_one(
-        {"id_hotel": id_hotel, "resena_id": resena_id},
-        {"$inc": {"votos_utilidad": 1}}
+        {
+            "id_hotel": id_hotel,
+            "resena_id": resena_id
+        },
+        {
+            "$inc": {
+                "votos_utilidad": 1
+            }
+        }
     )
+
     return {"mensaje": "Voto registrado"}
 
 # =========================================================
@@ -140,10 +190,20 @@ def votar_resena(id_hotel: str, resena_id: str, datos: dict):
 # =========================================================
 @app.get("/clientes/{id_cliente}/resenas")
 def get_resenas_cliente(id_cliente: str):
-    resenas = list(db["resenas"].find(
-        {"id_cliente": id_cliente},
-        {"_id": 0}
-    ).sort("fecha_creacion", -1))
+
+    resenas = list(
+        db["resenas"]
+        .find(
+            {
+                "id_cliente": id_cliente
+            },
+            {
+                "_id": 0
+            }
+        )
+        .sort("fecha_creacion", -1)
+    )
+
     return resenas
 
 # =========================================================
@@ -151,16 +211,23 @@ def get_resenas_cliente(id_cliente: str):
 # =========================================================
 @app.post("/hoteles/{id_hotel}/resenas/{resena_id}/respuesta")
 def responder_resena(id_hotel: str, resena_id: str, datos: dict):
+
     db["resenas"].update_one(
-        {"id_hotel": id_hotel, "resena_id": resena_id},
-        {"$set": {
-            "respuesta_hotel": {
-                "texto":    str(datos.get("texto_respuesta")),
-                "id_admin": str(datos.get("id_admin")),
-                "fecha":    datetime.now()
+        {
+            "id_hotel": id_hotel,
+            "resena_id": resena_id
+        },
+        {
+            "$set": {
+                "respuesta_hotel": {
+                    "texto": str(datos.get("texto_respuesta")),
+                    "id_admin": str(datos.get("id_admin")),
+                    "fecha": datetime.now()
+                }
             }
-        }}
+        }
     )
+
     return {"mensaje": "Respuesta registrada"}
 
 # =========================================================
@@ -168,37 +235,82 @@ def responder_resena(id_hotel: str, resena_id: str, datos: dict):
 # =========================================================
 @app.delete("/admin/hoteles/{id_hotel}/resenas/{resena_id}")
 def eliminar_resena_admin(id_hotel: str, resena_id: str):
+
     db["resenas"].update_one(
-        {"id_hotel": id_hotel, "resena_id": resena_id},
-        {"$set": {"estado": "eliminada_admin"}}
+        {
+            "id_hotel": id_hotel,
+            "resena_id": resena_id
+        },
+        {
+            "$set": {
+                "estado": "eliminada_admin"
+            }
+        }
     )
+
     return {"mensaje": "Reseña eliminada por administrador"}
 
 # =========================================================
 # RF9 - DESTACAR RESEÑA
+# SOLO UNA DESTACADA POR HOTEL
 # =========================================================
 @app.post("/admin/hoteles/{id_hotel}/resenas/{resena_id}/destacar")
 def destacar_resena(id_hotel: str, resena_id: str):
+
+    # quitar destacada anterior
     db["resenas"].update_many(
-        {"id_hotel": id_hotel, "destacada": True},
-        {"$set": {"destacada": False}}
+        {
+            "id_hotel": id_hotel,
+            "destacada": True
+        },
+        {
+            "$set": {
+                "destacada": False
+            }
+        }
     )
+
+    # destacar nueva
     db["resenas"].update_one(
-        {"id_hotel": id_hotel, "resena_id": resena_id},
-        {"$set": {"destacada": True}}
+        {
+            "id_hotel": id_hotel,
+            "resena_id": resena_id
+        },
+        {
+            "$set": {
+                "destacada": True
+            }
+        }
     )
+
     return {"mensaje": "Reseña destacada"}
 
 # =========================================================
-# ADMIN - VER TODAS LAS RESEÑAS (incluye eliminadas)
+# ADMIN - VER TODAS LAS RESEÑAS
+# DESTACADAS PRIMERO
 # =========================================================
 @app.get("/admin/hoteles/{id_hotel}/resenas")
 def get_resenas_admin(id_hotel: str):
+
     try:
-        resenas = list(db["resenas"].find(
-            {"id_hotel": id_hotel},
-            {"_id": 0}
-        ).sort("fecha_creacion", -1))
+
+        resenas = list(
+            db["resenas"]
+            .find(
+                {
+                    "id_hotel": id_hotel
+                },
+                {
+                    "_id": 0
+                }
+            )
+            .sort([
+                ("destacada", -1),
+                ("fecha_creacion", -1)
+            ])
+        )
+
         return resenas
+
     except Exception as e:
         return {"error": str(e)}
