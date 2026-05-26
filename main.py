@@ -1,15 +1,24 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pymongo import MongoClient
 from datetime import datetime
 import os
 import uuid
- 
+
 app = FastAPI()
- 
-# =========================================================
-# CORS
-# =========================================================
+
+@app.options("/{rest_of_path:path}")
+async def options_handler(rest_of_path: str):
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        }
+    )
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,20 +26,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
- 
+
 # =========================================================
 # MONGODB
 # =========================================================
 client = MongoClient(os.environ["MONGO_URI"])
 db = client["ISIS2304E10202610"]
- 
+
 # =========================================================
 # INICIO
 # =========================================================
 @app.get("/")
 def inicio():
     return {"estado": "API funcionando correctamente"}
- 
+
 # =========================================================
 # RF1 - CREAR RESEÑA
 # =========================================================
@@ -38,23 +47,23 @@ def inicio():
 def post_resena(id_hotel: str, datos: dict):
     try:
         nueva_resena = {
-            "id_hotel":       str(id_hotel),
-            "resena_id":      str(uuid.uuid4()),
-            "id_reserva":     str(datos.get("id_reserva")),
-            "id_cliente":     str(datos.get("id_cliente")),
-            "calificacion":   int(datos.get("calificacion", 0)),
-            "texto":          str(datos.get("texto")),
-            "fecha_creacion": datetime.now(),
-            "estado":         "publicada",
-            "votos_utilidad": 0,
-            "destacada":      False,
+            "id_hotel":        str(id_hotel),
+            "resena_id":       str(uuid.uuid4()),
+            "id_reserva":      str(datos.get("id_reserva")),
+            "id_cliente":      str(datos.get("id_cliente")),
+            "calificacion":    int(datos.get("calificacion", 0)),
+            "texto":           str(datos.get("texto")),
+            "fecha_creacion":  datetime.now(),
+            "estado":          "publicada",
+            "votos_utilidad":  0,
+            "destacada":       False,
             "respuesta_hotel": None
         }
         db["resenas"].insert_one(nueva_resena)
         return {"mensaje": "Reseña guardada", "resena_id": nueva_resena["resena_id"]}
     except Exception as e:
         return {"error": str(e)}
- 
+
 # =========================================================
 # RF2 - EDITAR RESEÑA
 # =========================================================
@@ -69,7 +78,7 @@ def editar_resena(id_hotel: str, resena_id: str, datos: dict):
         }}
     )
     return {"mensaje": "Reseña actualizada"}
- 
+
 # =========================================================
 # RF3 - ELIMINAR RESEÑA (cliente)
 # =========================================================
@@ -80,7 +89,7 @@ def eliminar_resena(id_hotel: str, resena_id: str):
         {"$set": {"estado": "eliminada"}}
     )
     return {"mensaje": "Reseña eliminada"}
- 
+
 # =========================================================
 # RF4 - CONSULTAR RESEÑAS (público, solo publicadas)
 # =========================================================
@@ -94,7 +103,7 @@ def get_resenas(id_hotel: str):
         return resenas
     except Exception as e:
         return {"error": str(e)}
- 
+
 # =========================================================
 # RF5 - VOTAR RESEÑA
 # =========================================================
@@ -111,7 +120,7 @@ def votar_resena(id_hotel: str, resena_id: str, datos: dict):
         {"$inc": {"votos_utilidad": 1}}
     )
     return {"mensaje": "Voto registrado"}
- 
+
 # =========================================================
 # RF6 - HISTORIAL CLIENTE
 # =========================================================
@@ -122,7 +131,7 @@ def get_resenas_cliente(id_cliente: str):
         {"_id": 0}
     ).sort("fecha_creacion", -1))
     return resenas
- 
+
 # =========================================================
 # RF7 - RESPONDER RESEÑA
 # =========================================================
@@ -139,7 +148,7 @@ def responder_resena(id_hotel: str, resena_id: str, datos: dict):
         }}
     )
     return {"mensaje": "Respuesta registrada"}
- 
+
 # =========================================================
 # RF8 - ELIMINAR RESEÑA ADMIN
 # =========================================================
@@ -150,7 +159,7 @@ def eliminar_resena_admin(id_hotel: str, resena_id: str):
         {"$set": {"estado": "eliminada_admin"}}
     )
     return {"mensaje": "Reseña eliminada por administrador"}
- 
+
 # =========================================================
 # RF9 - DESTACAR RESEÑA
 # =========================================================
@@ -165,9 +174,9 @@ def destacar_resena(id_hotel: str, resena_id: str):
         {"$set": {"destacada": True}}
     )
     return {"mensaje": "Reseña destacada"}
- 
+
 # =========================================================
-# ADMIN - VER TODAS LAS RESEÑAS DE UN HOTEL (incluye eliminadas)
+# ADMIN - VER TODAS LAS RESEÑAS (incluye eliminadas)
 # =========================================================
 @app.get("/admin/hoteles/{id_hotel}/resenas")
 def get_resenas_admin(id_hotel: str):
